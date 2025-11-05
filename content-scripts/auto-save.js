@@ -320,10 +320,22 @@ const observer = new MutationObserver((mutations) => {
   });
 });
 
-// 开始观察DOM变化
-observer.observe(document.body, {
-  childList: true,
-  subtree: true
-});
-
-console.log('[AutoSave] 草稿自动保存已启动');
+// 开始观察DOM变化（确保body已加载）
+if (document.body) {
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+  console.log('[AutoSave] 草稿自动保存已启动');
+} else {
+  // 等待body加载
+  document.addEventListener('DOMContentLoaded', () => {
+    if (document.body) {
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      console.log('[AutoSave] 草稿自动保存已启动（延迟）');
+    }
+  });
+}
