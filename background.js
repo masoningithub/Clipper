@@ -20,6 +20,14 @@ chrome.runtime.onInstalled.addListener(() => {
   cleanExpiredDrafts();
 });
 
+// 点击扩展图标时打开侧边栏
+chrome.action.onClicked.addListener((tab) => {
+  // 打开侧边栏
+  chrome.sidePanel.open({ windowId: tab.windowId }).catch((error) => {
+    console.error('[Action] 打开侧边栏失败:', error);
+  });
+});
+
 /**
  * 清理超过30天未访问的草稿
  * 性能优化：批量处理避免多次存储写入
@@ -74,6 +82,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // 保存草稿（从content script调用）
   if (request.type === 'SAVE_DRAFT') {
     handleSaveDraft(request, sendResponse);
+    return true;
+  }
+
+  // 打开侧边栏（从content script调用）
+  if (request.type === 'OPEN_SIDE_PANEL') {
+    handleOpenSidePanel(sender, sendResponse);
     return true;
   }
 });
@@ -137,6 +151,23 @@ async function handleSaveDraft(request, sendResponse) {
     sendResponse({ success: true });
   } catch (error) {
     console.error('[Background] 保存草稿失败:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+/**
+ * 打开侧边栏（从content script调用）
+ */
+async function handleOpenSidePanel(sender, sendResponse) {
+  try {
+    if (sender.tab && sender.tab.windowId) {
+      await chrome.sidePanel.open({ windowId: sender.tab.windowId });
+      sendResponse({ success: true });
+    } else {
+      sendResponse({ success: false, error: '无法获取窗口ID' });
+    }
+  } catch (error) {
+    console.error('[Background] 打开侧边栏失败:', error);
     sendResponse({ success: false, error: error.message });
   }
 }
