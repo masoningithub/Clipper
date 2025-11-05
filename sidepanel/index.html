@@ -1,17 +1,100 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Universal Draft Saver - 草稿管理侧边栏">
+  <title>草稿箱 - Universal Draft Saver</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>📝 草稿箱</h1>
-    <div id="drafts-list">
-      <!-- 草稿列表由JS注入 -->
+  <!-- 主容器 -->
+  <div class="container" role="main">
+
+    <!-- 头部 -->
+    <header class="header">
+      <h1 id="main-title" class="title">
+        <span aria-hidden="true">📝</span>
+        <span>草稿箱</span>
+      </h1>
+      <p class="subtitle">本地存储，完全隐私保护</p>
+    </header>
+
+    <!-- 搜索和过滤区域 -->
+    <div class="toolbar" role="toolbar" aria-label="草稿筛选工具栏">
+      <label for="search-input" class="visually-hidden">搜索草稿</label>
+      <input
+        type="search"
+        id="search-input"
+        class="search-input"
+        placeholder="搜索草稿内容..."
+        aria-label="搜索草稿内容"
+      >
+
+      <label for="sort-select" class="visually-hidden">排序方式</label>
+      <select
+        id="sort-select"
+        class="sort-select"
+        aria-label="选择排序方式"
+      >
+        <option value="time-desc">最新保存</option>
+        <option value="time-asc">最早保存</option>
+        <option value="domain">按域名</option>
+      </select>
     </div>
-    <button id="clear-all" class="action-btn">清空所有草稿</button>
+
+    <!-- 草稿列表 -->
+    <div
+      id="drafts-list"
+      class="drafts-list"
+      role="list"
+      aria-live="polite"
+      aria-label="草稿列表"
+    >
+      <!-- 草稿项将由JavaScript动态插入 -->
+      <div class="loading" role="status" aria-live="polite">
+        <span>加载中...</span>
+      </div>
+    </div>
+
+    <!-- 底部操作按钮 -->
+    <footer class="footer">
+      <button
+        id="clear-all-btn"
+        class="btn btn-danger btn-block"
+        type="button"
+        aria-label="清空所有草稿"
+      >
+        <span aria-hidden="true">🗑️</span>
+        清空所有草稿
+      </button>
+
+      <button
+        id="export-btn"
+        class="btn btn-secondary btn-block"
+        type="button"
+        aria-label="导出草稿为JSON"
+        style="margin-top: 8px;"
+      >
+        <span aria-hidden="true">📤</span>
+        导出草稿
+      </button>
+    </footer>
+
   </div>
+
+  <!-- 确认对话框模板 -->
+  <div id="confirm-dialog" class="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="dialog-title" style="display: none;">
+    <div class="dialog-content">
+      <h2 id="dialog-title" class="dialog-title">确认操作</h2>
+      <p id="dialog-message" class="dialog-message"></p>
+      <div class="dialog-actions">
+        <button id="dialog-confirm" class="btn btn-danger" type="button">确认</button>
+        <button id="dialog-cancel" class="btn btn-secondary" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="script.js"></script>
 </body>
 </html>
