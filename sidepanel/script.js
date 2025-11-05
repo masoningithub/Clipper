@@ -249,11 +249,11 @@ async function handleRestore(draft) {
       return;
     }
 
-    // 注入恢复脚本
+    // 注入恢复脚本（传递完整的draft对象）
     await chrome.scripting.executeScript({
       target: { tabId: activeTab.id },
       func: restoreContentToPage,
-      args: [draft.content, draft.isRichText]
+      args: [draft]
     });
 
     // 更新访问时间
@@ -281,36 +281,66 @@ async function handleRestore(draft) {
 
 /**
  * 在页面中恢复内容（注入函数）
- * @param {string} content - 内容
- * @param {boolean} isRichText - 是否富文本
+ * @param {Object} draft - 草稿对象
  */
-function restoreContentToPage(content, isRichText) {
+function restoreContentToPage(draft) {
   try {
-    // 查找最佳输入元素
-    const textareas = Array.from(document.querySelectorAll('textarea'));
-    const editables = Array.from(document.querySelectorAll('[contenteditable="true"]'));
-
-    const visibleTextareas = textareas.filter(el =>
-      el.offsetParent !== null &&
-      el.style.display !== 'none' &&
-      el.type !== 'password'
-    );
-
-    const visibleEditables = editables.filter(el =>
-      el.offsetParent !== null &&
-      el.style.display !== 'none'
-    );
-
-    // 优先级匹配
+    // 尝试根据元数据查找对应元素
     let targetElement = null;
 
-    if (isRichText && visibleEditables.length > 0) {
-      targetElement = visibleEditables[0];
-    } else if (!isRichText && visibleTextareas.length > 0) {
-      targetElement = visibleTextareas.find(el => el.offsetHeight > 150) || visibleTextareas[0];
-    } else {
-      // 类型不匹配时选择任意可用元素
-      targetElement = visibleEditables[0] || visibleTextareas[0];
+    if (draft.metadata) {
+      if (draft.metadata.elementId) {
+        targetElement = document.getElementById(draft.metadata.elementId);
+      } else if (draft.metadata.elementName) {
+        const candidates = document.getElementsByName(draft.metadata.elementName);
+        if (candidates.length > 0) {
+          targetElement = candidates[0];
+        }
+      }
+    }
+
+    // 如果没找到，智能查找
+    if (!targetElement) {
+      const textareas = Array.from(document.querySelectorAll('textarea'));
+      const editables = Array.from(document.querySelectorAll('[contenteditable="true"]'));
+      const inputs = Array.from(document.querySelectorAll('input'));
+      const selects = Array.from(document.querySelectorAll('select'));
+
+      const visibleTextareas = textareas.filter(el =>
+        el.offsetParent !== null && el.style.display !== 'none'
+      );
+
+      const visibleEditables = editables.filter(el =>
+        el.offsetParent !== null && el.style.display !== 'none'
+      );
+
+      const visibleInputs = inputs.filter(el =>
+        el.offsetParent !== null &&
+        el.style.display !== 'none' &&
+        el.type !== 'password' &&
+        el.type !== 'hidden'
+      );
+
+      const visibleSelects = selects.filter(el =>
+        el.offsetParent !== null && el.style.display !== 'none'
+      );
+
+      // 根据elementType匹配
+      const elementType = draft.elementType || (draft.isRichText ? 'contenteditable' : 'textarea');
+
+      if (elementType === 'contenteditable') {
+        targetElement = visibleEditables[0];
+      } else if (elementType === 'textarea') {
+        targetElement = visibleTextareas.find(el => el.offsetHeight > 150) || visibleTextareas[0];
+      } else if (elementType.startsWith('input-')) {
+        const inputType = elementType.replace('input-', '');
+        targetElement = visibleInputs.find(el => el.type === inputType) || visibleInputs[0];
+      } else if (elementType === 'select') {
+        targetElement = visibleSelects[0];
+      } else {
+        // 默认优先级
+        targetElement = visibleEditables[0] || visibleTextareas[0] || visibleInputs[0] || visibleSelects[0];
+      }
     }
 
     if (!targetElement) {
@@ -318,17 +348,41 @@ function restoreContentToPage(content, isRichText) {
       return;
     }
 
-    // 恢复内容
-    if (targetElement.isContentEditable) {
-      targetElement.innerHTML = content;
-    } else {
-      // 如果是富文本内容但目标是textarea，转换为纯文本
-      if (isRichText) {
-        const temp = document.createElement('div');
-        temp.innerHTML = content;
-        targetElement.value = temp.textContent || temp.innerText;
+    // 根据元素类型恢复内容
+    const elementType = draft.elementType || (draft.isRichText ? 'contenteditable' : 'textarea');
+
+    if (elementType === 'contenteditable' && targetElement.isContentEditable) {
+      targetElement.innerHTML = draft.content;
+    } else if (elementType === 'textarea' && targetElement.tagName === 'TEXTAREA') {
+      targetElement.value = draft.content;
+    } else if (elementType.startsWith('input-')) {
+      const inputType = elementType.replace('input-', '');
+
+      if (inputType === 'checkbox') {
+        targetElement.checked = draft.metadata?.checked || draft.content === 'checked';
+      } else if (inputType === 'radio') {
+        targetElement.checked = draft.metadata?.checked || draft.content.startsWith('checked:');
       } else {
-        targetElement.value = content;
+        targetElement.value = draft.content;
+      }
+    } else if (elementType === 'select' && targetElement.tagName === 'SELECT') {
+      try {
+        const selectedOptions = JSON.parse(draft.content);
+        if (selectedOptions && selectedOptions.length > 0) {
+          Array.from(targetElement.options).forEach(option => {
+            option.selected = selectedOptions.some(sel => sel.value === option.value);
+          });
+        }
+      } catch (e) {
+        console.error('恢复select失败:', e);
+      }
+    } else {
+      // 兜底：纯文本恢复
+      const plainText = draft.content.replace(/<[^>]*>/g, '');
+      if (targetElement.tagName === 'TEXTAREA' || targetElement.tagName === 'INPUT') {
+        targetElement.value = plainText;
+      } else if (targetElement.isContentEditable) {
+        targetElement.textContent = plainText;
       }
     }
 
