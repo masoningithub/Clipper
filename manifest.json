@@ -2,14 +2,22 @@
   "manifest_version": 3,
   "name": "Universal Draft Saver",
   "version": "1.0",
-  "description": "Auto-saves your unsent drafts locally. Zero data collection.",
+  "description": "本地自动保存草稿，零网络请求，完全隐私保护",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage", "sidePanel", "scripting"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "scripting",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -18,19 +26,21 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content-scripts/auto-save.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": false
     },
     {
       "matches": ["<all_urls>"],
       "js": ["content-scripts/restore-prompt.js"],
-      "run_at": "document_start"
+      "run_at": "document_end",
+      "all_frames": false
     }
   ],
   "side_panel": {
     "default_path": "sidepanel/index.html"
   },
   "action": {
-    "default_popup": "sidepanel/index.html",
+    "default_title": "打开草稿箱",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png"
@@ -41,7 +51,8 @@
       "suggested_key": {
         "default": "Ctrl+Shift+D",
         "mac": "Command+Shift+D"
-      }
+      },
+      "description": "打开草稿箱侧边栏"
     }
   }
 }
