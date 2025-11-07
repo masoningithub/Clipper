@@ -78,9 +78,18 @@ function shouldSaveElement(el) {
   if (tagName === 'INPUT') {
     const textInputTypes = ['text', 'email', 'url', 'tel', 'number', 'date', 'datetime-local', 'month', 'week', 'time', 'color'];
     if (textInputTypes.includes(el.type)) {
-      // 排除短的name字段（通常是用户名、邮箱等敏感信息）
-      const sensitivePatterns = /username|user|email|login|account|phone|mobile|名字|用户名|邮箱|手机|电话/i;
-      if (sensitivePatterns.test(el.name || '') || sensitivePatterns.test(el.id || '')) {
+      // 排除用户名、登录名等敏感字段（但允许email类型字段）
+      // 注意：email类型的input是合法的表单字段，不应该被排除
+      if (el.type !== 'email') {
+        const sensitivePatterns = /username|user|login|account|名字|用户名/i;
+        if (sensitivePatterns.test(el.name || '') || sensitivePatterns.test(el.id || '')) {
+          console.log('[AutoSave] 排除敏感字段:', el.name || el.id);
+          return false;
+        }
+      }
+      // 特别处理：即使是email类型，如果明确是登录邮箱也要排除
+      if (el.type === 'email' && /login|signin/i.test(el.name || el.id || '')) {
+        console.log('[AutoSave] 排除登录邮箱字段:', el.name || el.id);
         return false;
       }
       return true;
@@ -362,8 +371,8 @@ async function encryptContent(content) {
   }
 }
 
-// 性能优化：使用防抖的保存函数，3秒内无新输入才保存
-const debouncedSave = debounce(saveDraft, 3000);
+// 性能优化：使用防抖的保存函数，1.5秒内无新输入才保存（降低延迟提升体验）
+const debouncedSave = debounce(saveDraft, 1500);
 
 /**
  * 监听输入事件
