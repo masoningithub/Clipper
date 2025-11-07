@@ -3,8 +3,12 @@
 // 功能：智能识别并自动保存草稿内容
 // ============================================
 
+console.log('[AutoSave] 脚本开始加载...');
+
 // 性能优化：使用WeakMap避免内存泄漏，存储元素相关数据
 const elementDataMap = new WeakMap();
+
+console.log('[AutoSave] WeakMap已初始化');
 
 /**
  * 智能判断元素是否应该保存
@@ -13,6 +17,8 @@ const elementDataMap = new WeakMap();
  */
 function shouldSaveElement(el) {
   if (!el || !el.tagName) return false;
+
+  const tagName = el.tagName.toUpperCase();
 
   // 排除规则1：密码字段（多种检测方式）
   const isPasswordField =
@@ -38,13 +44,17 @@ function shouldSaveElement(el) {
   // 排除规则3：隐藏元素
   if (el.offsetParent === null || el.style.display === 'none') return false;
 
+  // 排除规则4：某些不需要保存的input类型
+  const excludedInputTypes = ['submit', 'button', 'reset', 'image', 'file', 'hidden'];
+  if (tagName === 'INPUT' && excludedInputTypes.includes(el.type)) return false;
+
   // 包含规则1：contenteditable富文本编辑器
   if (el.isContentEditable && el.getAttribute('contenteditable') === 'true') {
     return true;
   }
 
   // 包含规则2：textarea文本域
-  if (el.tagName === 'TEXTAREA') {
+  if (tagName === 'TEXTAREA') {
     // 性能优化：缓存计算的样式，避免重复getComputedStyle
     let cachedData = elementDataMap.get(el);
     if (!cachedData) {
@@ -62,6 +72,30 @@ function shouldSaveElement(el) {
     if (contentPatterns.test(el.name || '') || contentPatterns.test(el.placeholder || '')) {
       return true;
     }
+  }
+
+  // 包含规则3：INPUT元素（文本类型）
+  if (tagName === 'INPUT') {
+    const textInputTypes = ['text', 'email', 'url', 'tel', 'number', 'date', 'datetime-local', 'month', 'week', 'time', 'color'];
+    if (textInputTypes.includes(el.type)) {
+      // 排除短的name字段（通常是用户名、邮箱等敏感信息）
+      const sensitivePatterns = /username|user|email|login|account|phone|mobile|名字|用户名|邮箱|手机|电话/i;
+      if (sensitivePatterns.test(el.name || '') || sensitivePatterns.test(el.id || '')) {
+        return false;
+      }
+      return true;
+    }
+  }
+
+  // 包含规则4：SELECT下拉选择框
+  if (tagName === 'SELECT') {
+    return true;
+  }
+
+  // 包含规则5：CHECKBOX和RADIO按钮（如果是表单的一部分）
+  if (tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) {
+    // 只保存有name的checkbox/radio（属于表单的一部分）
+    return !!(el.name);
   }
 
   return false;
@@ -89,8 +123,62 @@ function debounce(func, delay) {
 function generateDraftKey(el) {
   // 优先使用ID，否则使用name，最后使用位置索引
   const hostname = window.location.hostname;
-  const identifier = el.id || el.name || `pos_${Array.from(document.querySelectorAll('textarea, [contenteditable]')).indexOf(el)}`;
+  const tagName = el.tagName.toLowerCase();
+  const identifier = el.id || el.name || `${tagName}_pos_${Array.from(document.querySelectorAll(tagName)).indexOf(el)}`;
   return `${hostname}_${identifier}`;
+}
+
+/**
+ * 提取元素的值（根据不同元素类型）
+ * @param {HTMLElement} el - 目标元素
+ * @returns {Object} 包含content和elementType的对象
+ */
+function extractElementValue(el) {
+  const tagName = el.tagName.toUpperCase();
+  let content = '';
+  let elementType = tagName.toLowerCase();
+  let additionalData = {};
+
+  if (el.isContentEditable) {
+    // contenteditable富文本
+    content = el.innerHTML;
+    elementType = 'contenteditable';
+  } else if (tagName === 'TEXTAREA') {
+    // textarea文本域
+    content = el.value;
+    elementType = 'textarea';
+  } else if (tagName === 'INPUT') {
+    const inputType = el.type || 'text';
+    elementType = `input-${inputType}`;
+
+    if (inputType === 'checkbox') {
+      // checkbox: 保存checked状态
+      content = el.checked ? 'checked' : 'unchecked';
+      additionalData.checked = el.checked;
+      additionalData.value = el.value;
+    } else if (inputType === 'radio') {
+      // radio: 保存checked状态和值
+      content = el.checked ? `checked:${el.value}` : `unchecked:${el.value}`;
+      additionalData.checked = el.checked;
+      additionalData.value = el.value;
+    } else {
+      // 其他input类型（text, email, url, number等）
+      content = el.value;
+    }
+  } else if (tagName === 'SELECT') {
+    // select下拉框: 保存选中的值和索引
+    elementType = 'select';
+    const selectedOptions = Array.from(el.selectedOptions).map(opt => ({
+      value: opt.value,
+      text: opt.text,
+      index: opt.index
+    }));
+    content = JSON.stringify(selectedOptions);
+    additionalData.selectedIndex = el.selectedIndex;
+    additionalData.multiple = el.multiple;
+  }
+
+  return { content, elementType, additionalData };
 }
 
 /**
@@ -99,19 +187,44 @@ function generateDraftKey(el) {
  */
 async function saveDraft(el) {
   try {
+    console.log('[AutoSave] saveDraft() 被调用:', el.tagName, el.id || el.name);
+
     // 安全检查：确保元素仍在DOM中
-    if (!el || !el.isConnected) return;
+    if (!el || !el.isConnected) {
+      console.log('[AutoSave] ✗ 元素不在DOM中，跳过');
+      return;
+    }
 
-    // 获取内容（根据元素类型）
-    const isRichText = el.isContentEditable;
-    const content = isRichText ? el.innerHTML : el.value;
+    // 提取元素的值
+    const { content, elementType, additionalData } = extractElementValue(el);
+    console.log('[AutoSave] 提取的值:', { content: content.substring(0, 50), elementType, additionalData });
 
-    // 空内容检查
-    const trimmedContent = isRichText
-      ? el.textContent?.trim()
-      : content?.trim();
+    // 空内容检查（根据元素类型调整验证规则）
+    if (elementType === 'input-checkbox' || elementType === 'input-radio') {
+      // checkbox和radio总是保存状态
+      console.log('[AutoSave] ✓ Checkbox/Radio，总是保存');
+    } else if (elementType === 'select') {
+      // select至少要有选中项
+      if (!content || content === '[]') {
+        console.log('[AutoSave] ✗ Select没有选中项，跳过');
+        return;
+      }
+      console.log('[AutoSave] ✓ Select有选中项');
+    } else {
+      // 其他类型需要检查内容长度
+      const trimmedContent = elementType === 'contenteditable'
+        ? el.textContent?.trim()
+        : content?.trim();
 
-    if (!trimmedContent || trimmedContent.length < 10) return; // 至少10个字符才保存
+      console.log('[AutoSave] 检查内容长度:', trimmedContent?.length, '字符');
+
+      // 对于文本输入，至少需要3个字符（降低阈值以支持更多场景）
+      if (!trimmedContent || trimmedContent.length < 3) {
+        console.log('[AutoSave] ✗ 内容少于3个字符，跳过');
+        return;
+      }
+      console.log('[AutoSave] ✓ 内容长度通过检查');
+    }
 
     // 构建草稿数据对象
     const draft = {
@@ -120,13 +233,17 @@ async function saveDraft(el) {
       timestamp: Date.now(),
       lastAccessed: Date.now(),
       title: document.title.substring(0, 60) || '无标题',
-      isRichText: isRichText,
+      elementType: elementType,
+      isRichText: elementType === 'contenteditable',
       domain: window.location.hostname,
       // 可选：添加元数据用于未来功能扩展
       metadata: {
         elementTag: el.tagName.toLowerCase(),
+        elementType: elementType,
         elementId: el.id || null,
-        elementName: el.name || null
+        elementName: el.name || null,
+        elementType: el.type || null,
+        ...additionalData
       }
     };
 
@@ -254,11 +371,42 @@ const debouncedSave = debounce(saveDraft, 3000);
  */
 document.addEventListener('input', (event) => {
   const target = event.target;
+  console.log('[AutoSave] Input事件触发:', target.tagName, target.type, target.id || target.name);
 
   if (shouldSaveElement(target)) {
+    console.log('[AutoSave] ✓ 元素通过检查，准备保存:', target.id || target.name || target.tagName);
     debouncedSave(target);
+  } else {
+    console.log('[AutoSave] ✗ 元素未通过检查，跳过:', target.tagName, target.type);
   }
 }, { passive: true }); // passive提升滚动性能
+
+console.log('[AutoSave] Input事件监听器已注册');
+
+/**
+ * 监听change事件（用于select、checkbox、radio等元素）
+ * 这些元素通常触发change而非input事件
+ */
+document.addEventListener('change', (event) => {
+  const target = event.target;
+  console.log('[AutoSave] Change事件触发:', target.tagName, target.type, target.id || target.name);
+
+  if (shouldSaveElement(target)) {
+    // select、checkbox、radio立即保存，无需防抖
+    const tagName = target.tagName.toUpperCase();
+    if (tagName === 'SELECT' || (tagName === 'INPUT' && (target.type === 'checkbox' || target.type === 'radio'))) {
+      console.log('[AutoSave] ✓ 立即保存 (select/checkbox/radio):', target.id || target.name);
+      saveDraft(target);
+    } else {
+      console.log('[AutoSave] ✓ 防抖保存:', target.id || target.name);
+      debouncedSave(target);
+    }
+  } else {
+    console.log('[AutoSave] ✗ Change事件元素未通过检查');
+  }
+}, { passive: true });
+
+console.log('[AutoSave] Change事件监听器已注册');
 
 /**
  * 页面卸载前保存所有草稿
@@ -267,17 +415,12 @@ document.addEventListener('input', (event) => {
 window.addEventListener('beforeunload', () => {
   try {
     // 查找所有可保存元素
-    const editableElements = document.querySelectorAll('textarea, [contenteditable="true"]');
+    const editableElements = document.querySelectorAll('textarea, [contenteditable="true"], input, select');
 
     editableElements.forEach(el => {
       if (shouldSaveElement(el)) {
-        const content = el.isContentEditable ? el.innerHTML : el.value;
-        const trimmed = el.isContentEditable ? el.textContent?.trim() : content?.trim();
-
-        if (trimmed && trimmed.length >= 10) {
-          // 立即保存（不等待异步完成）
-          saveDraft(el);
-        }
+        // 立即保存（不等待异步完成）
+        saveDraft(el);
       }
     });
   } catch (error) {
@@ -295,23 +438,15 @@ const observer = new MutationObserver((mutations) => {
       if (node.nodeType === Node.ELEMENT_NODE) {
         // 检查新增节点本身
         if (shouldSaveElement(node)) {
-          node.addEventListener('input', (e) => {
-            if (shouldSaveElement(e.target)) {
-              debouncedSave(e.target);
-            }
-          }, { passive: true });
+          attachEventListeners(node);
         }
 
         // 检查新增节点的子元素
         if (node.querySelectorAll) {
-          const editables = node.querySelectorAll('textarea, [contenteditable="true"]');
-          editables.forEach(el => {
+          const formElements = node.querySelectorAll('textarea, [contenteditable="true"], input, select');
+          formElements.forEach(el => {
             if (shouldSaveElement(el)) {
-              el.addEventListener('input', (e) => {
-                if (shouldSaveElement(e.target)) {
-                  debouncedSave(e.target);
-                }
-              }, { passive: true });
+              attachEventListeners(el);
             }
           });
         }
@@ -319,6 +454,30 @@ const observer = new MutationObserver((mutations) => {
     });
   });
 });
+
+/**
+ * 为元素附加事件监听器
+ * @param {HTMLElement} el - 目标元素
+ */
+function attachEventListeners(el) {
+  const tagName = el.tagName.toUpperCase();
+
+  // input事件（用于文本输入）
+  el.addEventListener('input', (e) => {
+    if (shouldSaveElement(e.target)) {
+      debouncedSave(e.target);
+    }
+  }, { passive: true });
+
+  // change事件（用于select、checkbox、radio）
+  if (tagName === 'SELECT' || (tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio'))) {
+    el.addEventListener('change', (e) => {
+      if (shouldSaveElement(e.target)) {
+        saveDraft(e.target);
+      }
+    }, { passive: true });
+  }
+}
 
 // 开始观察DOM变化（确保body已加载）
 if (document.body) {

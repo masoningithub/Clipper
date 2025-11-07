@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Draft Saver - 测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #3498db;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #3498db;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px 0;
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="email"],
+        input[type="url"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 100px;
+            font-family: inherit;
+        }
+        .checkbox-group,
+        .radio-group {
+            margin: 10px 0;
+        }
+        .checkbox-group label,
+        .radio-group label {
+            display: inline-block;
+            margin-right: 15px;
+            font-weight: normal;
+        }
+        .status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background: #27ae60;
+            color: white;
+            border-radius: 6px;
+            display: none;
+            z-index: 10000;
+        }
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #856404;
+        }
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .debug-info {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Universal Draft Saver - 测试页面</h1>
+
+        <div class="instructions">
+            <h3>📋 使用说明：</h3>
+            <ol>
+                <li><strong>确认扩展已加载：</strong> 在 chrome://extensions/ 页面检查扩展是否已启用</li>
+                <li><strong>打开开发者工具：</strong> 按 F12 打开控制台（Console）</li>
+                <li><strong>填写表单：</strong> 在下方任意字段输入内容</li>
+                <li><strong>等待3秒：</strong> 文本字段会自动保存（控制台会显示日志）</li>
+                <li><strong>刷新页面：</strong> 右下角会出现恢复提示</li>
+                <li><strong>查看控制台：</strong> 寻找 [AutoSave] 或 [RestorePrompt] 开头的日志</li>
+            </ol>
+        </div>
+
+        <div class="section">
+            <h2>📝 文本输入测试</h2>
+
+            <label for="title">标题 (至少输入3个字符)：</label>
+            <input type="text" id="title" name="title" placeholder="输入标题...">
+
+            <label for="email">邮箱：</label>
+            <input type="email" id="email" name="email" placeholder="your@email.com">
+
+            <label for="website">网站：</label>
+            <input type="url" id="website" name="website" placeholder="https://example.com">
+
+            <label for="age">年龄：</label>
+            <input type="number" id="age" name="age" min="1" max="120" placeholder="25">
+
+            <label for="description">描述 (textarea大于150px会优先保存)：</label>
+            <textarea id="description" name="description" rows="6" placeholder="输入详细描述..."></textarea>
+        </div>
+
+        <div class="section">
+            <h2>📋 选择测试</h2>
+
+            <label for="category">类别：</label>
+            <select id="category" name="category">
+                <option value="">请选择...</option>
+                <option value="tech">技术</option>
+                <option value="life">生活</option>
+                <option value="work">工作</option>
+                <option value="study">学习</option>
+            </select>
+
+            <label for="tags">标签 (多选)：</label>
+            <select id="tags" name="tags" multiple size="4">
+                <option value="html">HTML</option>
+                <option value="css">CSS</option>
+                <option value="js">JavaScript</option>
+                <option value="python">Python</option>
+            </select>
+        </div>
+
+        <div class="section">
+            <h2>☑️ 复选框测试</h2>
+            <div class="checkbox-group">
+                <label><input type="checkbox" name="interests" value="reading"> 阅读</label>
+                <label><input type="checkbox" name="interests" value="sports"> 运动</label>
+                <label><input type="checkbox" name="interests" value="music"> 音乐</label>
+                <label><input type="checkbox" name="interests" value="travel"> 旅行</label>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🔘 单选按钮测试</h2>
+            <div class="radio-group">
+                <label><input type="radio" name="gender" value="male"> 男</label>
+                <label><input type="radio" name="gender" value="female"> 女</label>
+                <label><input type="radio" name="gender" value="other"> 其他</label>
+            </div>
+        </div>
+
+        <div class="debug-info" id="debug-info">
+            <strong>🔍 调试信息：</strong><br>
+            <span id="extension-status">检查扩展状态...</span><br>
+            <span id="event-log">等待事件...</span>
+        </div>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <script>
+        // 客户端调试脚本
+        let eventCount = 0;
+
+        // 监听所有input事件
+        document.addEventListener('input', function(e) {
+            eventCount++;
+            const target = e.target;
+            const info = `[${eventCount}] Input事件: ${target.tagName} #${target.id || target.name} = "${target.value.substring(0, 20)}..."`;
+            console.log('%c' + info, 'color: green; font-weight: bold');
+            updateDebugInfo(info);
+            showStatus('检测到输入: ' + (target.id || target.name || target.tagName));
+        });
+
+        // 监听change事件
+        document.addEventListener('change', function(e) {
+            eventCount++;
+            const target = e.target;
+            let value = target.value;
+            if (target.type === 'checkbox' || target.type === 'radio') {
+                value = target.checked ? 'checked' : 'unchecked';
+            }
+            const info = `[${eventCount}] Change事件: ${target.tagName} #${target.id || target.name} = ${value}`;
+            console.log('%c' + info, 'color: blue; font-weight: bold');
+            updateDebugInfo(info);
+            showStatus('检测到改变: ' + (target.id || target.name || target.tagName));
+        });
+
+        function updateDebugInfo(message) {
+            const eventLog = document.getElementById('event-log');
+            eventLog.textContent = message;
+        }
+
+        function showStatus(message) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 2000);
+        }
+
+        // 检查扩展是否加载
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                const statusEl = document.getElementById('extension-status');
+
+                // 检查chrome对象是否存在
+                if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                    statusEl.innerHTML = '✅ Chrome扩展API可用<br>扩展ID: ' + chrome.runtime.id;
+                    statusEl.style.color = 'green';
+                } else {
+                    statusEl.innerHTML = '❌ Chrome扩展API不可用';
+                    statusEl.style.color = 'red';
+                }
+
+                // 检查控制台日志
+                console.log('%c===== Universal Draft Saver 测试页面 =====', 'color: blue; font-size: 16px; font-weight: bold');
+                console.log('%c如果你看到 [AutoSave] 日志，说明扩展正在工作', 'color: green');
+                console.log('%c如果3秒内没有看到任何日志，请检查：', 'color: orange');
+                console.log('1. 扩展是否在 chrome://extensions/ 中启用');
+                console.log('2. 是否点击了扩展的刷新按钮');
+                console.log('3. 是否刷新了这个页面');
+                console.log('4. 控制台是否有JavaScript错误（红色）');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

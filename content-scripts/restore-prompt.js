@@ -248,8 +248,25 @@ function showRestorePrompt(drafts) {
  */
 function restoreDraft(draft) {
   try {
-    // 查找合适的输入元素
-    const targetElement = findBestInputElement();
+    // 根据草稿的元数据查找对应元素
+    let targetElement = null;
+
+    // 优先根据元素ID或name查找
+    if (draft.metadata) {
+      if (draft.metadata.elementId) {
+        targetElement = document.getElementById(draft.metadata.elementId);
+      } else if (draft.metadata.elementName) {
+        const candidates = document.getElementsByName(draft.metadata.elementName);
+        if (candidates.length > 0) {
+          targetElement = candidates[0];
+        }
+      }
+    }
+
+    // 如果没找到，使用智能匹配
+    if (!targetElement) {
+      targetElement = findBestInputElement(draft.elementType);
+    }
 
     if (!targetElement) {
       alert('未找到可恢复的输入框，请手动打开侧边栏恢复');
@@ -257,21 +274,46 @@ function restoreDraft(draft) {
     }
 
     // 根据元素类型恢复内容
-    if (draft.isRichText && targetElement.isContentEditable) {
+    const elementType = draft.elementType || (draft.isRichText ? 'contenteditable' : 'textarea');
+
+    if (elementType === 'contenteditable' && targetElement.isContentEditable) {
       targetElement.innerHTML = draft.content;
-    } else if (!draft.isRichText && targetElement.tagName === 'TEXTAREA') {
+    } else if (elementType === 'textarea' && targetElement.tagName === 'TEXTAREA') {
       targetElement.value = draft.content;
+    } else if (elementType.startsWith('input-')) {
+      const inputType = elementType.replace('input-', '');
+
+      if (inputType === 'checkbox') {
+        targetElement.checked = draft.metadata?.checked || draft.content === 'checked';
+      } else if (inputType === 'radio') {
+        targetElement.checked = draft.metadata?.checked || draft.content.startsWith('checked:');
+      } else {
+        // 其他input类型（text, email, url等）
+        targetElement.value = draft.content;
+      }
+    } else if (elementType === 'select' && targetElement.tagName === 'SELECT') {
+      try {
+        const selectedOptions = JSON.parse(draft.content);
+        if (selectedOptions && selectedOptions.length > 0) {
+          // 恢复选中状态
+          Array.from(targetElement.options).forEach(option => {
+            option.selected = selectedOptions.some(sel => sel.value === option.value);
+          });
+        }
+      } catch (e) {
+        console.error('[RestorePrompt] 恢复select失败:', e);
+      }
     } else {
       // 类型不匹配时尝试纯文本恢复
       const plainText = getPlainText(draft.content);
-      if (targetElement.tagName === 'TEXTAREA') {
+      if (targetElement.tagName === 'TEXTAREA' || targetElement.tagName === 'INPUT') {
         targetElement.value = plainText;
-      } else {
+      } else if (targetElement.isContentEditable) {
         targetElement.textContent = plainText;
       }
     }
 
-    // 触发input事件（某些应用需要）
+    // 触发事件（某些应用需要）
     targetElement.dispatchEvent(new Event('input', { bubbles: true }));
     targetElement.dispatchEvent(new Event('change', { bubbles: true }));
 
@@ -298,18 +340,20 @@ function restoreDraft(draft) {
 
 /**
  * 查找最佳输入元素
- * 优先级：高度>150px的textarea > contenteditable > 普通textarea
+ * 优先级：匹配类型 > 高度>150px的textarea > contenteditable > 普通textarea > input > select
+ * @param {string} preferredType - 首选元素类型（可选）
  * @returns {HTMLElement|null}
  */
-function findBestInputElement() {
+function findBestInputElement(preferredType) {
   const textareas = Array.from(document.querySelectorAll('textarea'));
   const editables = Array.from(document.querySelectorAll('[contenteditable="true"]'));
+  const inputs = Array.from(document.querySelectorAll('input'));
+  const selects = Array.from(document.querySelectorAll('select'));
 
-  // 过滤掉隐藏元素
+  // 过滤掉隐藏元素和密码字段
   const visibleTextareas = textareas.filter(el =>
     el.offsetParent !== null &&
-    el.style.display !== 'none' &&
-    el.type !== 'password'
+    el.style.display !== 'none'
   );
 
   const visibleEditables = editables.filter(el =>
@@ -317,6 +361,36 @@ function findBestInputElement() {
     el.style.display !== 'none'
   );
 
+  const visibleInputs = inputs.filter(el =>
+    el.offsetParent !== null &&
+    el.style.display !== 'none' &&
+    el.type !== 'password' &&
+    el.type !== 'hidden' &&
+    el.type !== 'submit' &&
+    el.type !== 'button'
+  );
+
+  const visibleSelects = selects.filter(el =>
+    el.offsetParent !== null &&
+    el.style.display !== 'none'
+  );
+
+  // 如果指定了首选类型，优先查找匹配类型的元素
+  if (preferredType) {
+    if (preferredType === 'contenteditable' && visibleEditables.length > 0) {
+      return visibleEditables[0];
+    } else if (preferredType === 'textarea' && visibleTextareas.length > 0) {
+      return visibleTextareas[0];
+    } else if (preferredType.startsWith('input-')) {
+      const inputType = preferredType.replace('input-', '');
+      const matchingInput = visibleInputs.find(el => el.type === inputType);
+      if (matchingInput) return matchingInput;
+    } else if (preferredType === 'select' && visibleSelects.length > 0) {
+      return visibleSelects[0];
+    }
+  }
+
+  // 默认优先级排序
   // 优先级1：高度>150px的textarea
   const largeTextarea = visibleTextareas.find(el => el.offsetHeight > 150);
   if (largeTextarea) return largeTextarea;
@@ -326,6 +400,18 @@ function findBestInputElement() {
 
   // 优先级3：第一个可见的textarea
   if (visibleTextareas.length > 0) return visibleTextareas[0];
+
+  // 优先级4：第一个可见的文本input
+  const textInput = visibleInputs.find(el =>
+    el.type === 'text' || el.type === 'email' || el.type === 'url' || el.type === 'tel'
+  );
+  if (textInput) return textInput;
+
+  // 优先级5：第一个可见的input
+  if (visibleInputs.length > 0) return visibleInputs[0];
+
+  // 优先级6：第一个可见的select
+  if (visibleSelects.length > 0) return visibleSelects[0];
 
   return null;
 }
