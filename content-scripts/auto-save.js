@@ -3,8 +3,12 @@
 // 功能：智能识别并自动保存草稿内容
 // ============================================
 
+console.log('[AutoSave] 脚本开始加载...');
+
 // 性能优化：使用WeakMap避免内存泄漏，存储元素相关数据
 const elementDataMap = new WeakMap();
+
+console.log('[AutoSave] WeakMap已初始化');
 
 /**
  * 智能判断元素是否应该保存
@@ -183,26 +187,43 @@ function extractElementValue(el) {
  */
 async function saveDraft(el) {
   try {
+    console.log('[AutoSave] saveDraft() 被调用:', el.tagName, el.id || el.name);
+
     // 安全检查：确保元素仍在DOM中
-    if (!el || !el.isConnected) return;
+    if (!el || !el.isConnected) {
+      console.log('[AutoSave] ✗ 元素不在DOM中，跳过');
+      return;
+    }
 
     // 提取元素的值
     const { content, elementType, additionalData } = extractElementValue(el);
+    console.log('[AutoSave] 提取的值:', { content: content.substring(0, 50), elementType, additionalData });
 
     // 空内容检查（根据元素类型调整验证规则）
     if (elementType === 'input-checkbox' || elementType === 'input-radio') {
       // checkbox和radio总是保存状态
+      console.log('[AutoSave] ✓ Checkbox/Radio，总是保存');
     } else if (elementType === 'select') {
       // select至少要有选中项
-      if (!content || content === '[]') return;
+      if (!content || content === '[]') {
+        console.log('[AutoSave] ✗ Select没有选中项，跳过');
+        return;
+      }
+      console.log('[AutoSave] ✓ Select有选中项');
     } else {
       // 其他类型需要检查内容长度
       const trimmedContent = elementType === 'contenteditable'
         ? el.textContent?.trim()
         : content?.trim();
 
+      console.log('[AutoSave] 检查内容长度:', trimmedContent?.length, '字符');
+
       // 对于文本输入，至少需要3个字符（降低阈值以支持更多场景）
-      if (!trimmedContent || trimmedContent.length < 3) return;
+      if (!trimmedContent || trimmedContent.length < 3) {
+        console.log('[AutoSave] ✗ 内容少于3个字符，跳过');
+        return;
+      }
+      console.log('[AutoSave] ✓ 内容长度通过检查');
     }
 
     // 构建草稿数据对象
@@ -350,11 +371,17 @@ const debouncedSave = debounce(saveDraft, 3000);
  */
 document.addEventListener('input', (event) => {
   const target = event.target;
+  console.log('[AutoSave] Input事件触发:', target.tagName, target.type, target.id || target.name);
 
   if (shouldSaveElement(target)) {
+    console.log('[AutoSave] ✓ 元素通过检查，准备保存:', target.id || target.name || target.tagName);
     debouncedSave(target);
+  } else {
+    console.log('[AutoSave] ✗ 元素未通过检查，跳过:', target.tagName, target.type);
   }
 }, { passive: true }); // passive提升滚动性能
+
+console.log('[AutoSave] Input事件监听器已注册');
 
 /**
  * 监听change事件（用于select、checkbox、radio等元素）
@@ -362,17 +389,24 @@ document.addEventListener('input', (event) => {
  */
 document.addEventListener('change', (event) => {
   const target = event.target;
+  console.log('[AutoSave] Change事件触发:', target.tagName, target.type, target.id || target.name);
 
   if (shouldSaveElement(target)) {
     // select、checkbox、radio立即保存，无需防抖
     const tagName = target.tagName.toUpperCase();
     if (tagName === 'SELECT' || (tagName === 'INPUT' && (target.type === 'checkbox' || target.type === 'radio'))) {
+      console.log('[AutoSave] ✓ 立即保存 (select/checkbox/radio):', target.id || target.name);
       saveDraft(target);
     } else {
+      console.log('[AutoSave] ✓ 防抖保存:', target.id || target.name);
       debouncedSave(target);
     }
+  } else {
+    console.log('[AutoSave] ✗ Change事件元素未通过检查');
   }
 }, { passive: true });
+
+console.log('[AutoSave] Change事件监听器已注册');
 
 /**
  * 页面卸载前保存所有草稿
